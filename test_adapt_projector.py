@@ -20,7 +20,10 @@ def experiment(args):
     elif args.dataset == 'imagenet':
         weights = torch.load(args.root + '/weights/' + args.model + '.pth')
     layers = [args.layer1, args.layer2, args.layer3, args.layer4]
+    # layers = [None, None, None, None]
     proj_layer = [args.project_layer1, args.project_layer2, args.project_layer3, args.project_layer4]
+    # proj_layer = [None, None, None, None]
+    # args.projection=False
     model = create_model.create_model(args, layers, proj_layer, weights).to(device)
     if proj_layer[0] != None:
         checkpoint = torch.load(args.root + 'weights/Projector1.pth')
@@ -86,7 +89,7 @@ def experiment(args):
                     for k in range(len(iteration[:indice + 1])):
                         ckpt = torch.load(args.save_iter + 'weights_iter_' + str(iteration[k]) + '.pkl')
                         model.load_state_dict(ckpt['weights'])
-                        model.projector3.load_state_dict(project_weights)
+                        # model.projector3.load_state_dict(project_weights)
                         correctness_new, _ = utils.test_batch(model, inputs, labels, adapt=True)
                         for i in range(len(correctness_new.tolist())):
                             if correctness[i] == True and correctness_new[i] == True:
@@ -103,15 +106,6 @@ def experiment(args):
             for k in range(len(iteration[:indice + 1])):
                 correct[k] += np.sum(good_good[k,]) + np.sum(bad_good[k,])
                 accuracy = correct[k] / len(teloader.dataset)
-                # print('--------------------RESULTS----------------------')
-                # print('Perturbation: ', args.corruption)
-                # print('Nombre d iterations: ', iteration[k])
-                # print('Good first, good after: ', np.sum(good_good[k,]))
-                # print('Good first, bad after: ', np.sum(good_bad[k,]))
-                # print('Bad first, good after: ', np.sum(bad_good[k,]))
-                # print('Bad first, bad after: ', np.sum(bad_bad[k,]))
-                # print('Accuracy: ', accuracy)
-                # print('Error: ', 1 - accuracy)
                 good_good_V[k, val] = np.sum(good_good[k,])
                 good_bad_V[k, val] = np.sum(good_bad[k,])
                 bad_good_V[k, val] = np.sum(bad_good[k,])

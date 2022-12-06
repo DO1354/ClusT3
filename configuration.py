@@ -48,7 +48,7 @@ def argparser():
     parser.add_argument('--adapt', action='store_true', help='To adapt or not')
     parser.add_argument('--level', default=5, type=int)
     parser.add_argument('--corruption', default='gaussian_noise')
-    parser.add_argument('--adapt-lr', default=0.0001, type=float)
+    parser.add_argument('--adapt-lr', default=0.00001, type=float)
     parser.add_argument('--niter', default=50, type=int)
     parser.add_argument('--best', action='store_true', help='Using best pretraining weights or not')
     parser.add_argument('--K', type=int, default=10, help='Num of classes')

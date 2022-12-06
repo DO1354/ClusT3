@@ -60,21 +60,29 @@ def accuracy(output, target, topk=(1,)):
 '''--------------------Adaptation Function-----------------------------'''
 def adapt_batch(net, niter, inputs, opt, K, iterations, save_iter, projection, proj_layers):
     net.inference = False
-    #net.eval()
+    net.train()
     entropy = Entropy()
     kl = torch.nn.KLDivLoss(reduction='batchmean')
     for iteration in range(niter):
-        _, out_proj = net(inputs, adapt=True, feature=False, projection=projection)
-        loss = 0
-        for i, layer in enumerate(proj_layers):
-            if layer != None :
-                loss += entropy(out_proj[i]) + kl(F.log_softmax(out_proj[i], dim=1), torch.full_like(out_proj[i], 1 / K))
+        if projection:
+            _, out_proj = net(inputs, adapt=True, feature=False, projection=projection)
+            loss = 0
+            for i, layer in enumerate(proj_layers):
+                if layer != None :
+                    x = out_proj[i]
+                    x_mean = x.mean(dim=0)
+                    loss += entropy(x) + kl(F.log_softmax(x_mean, dim=0), torch.full_like(x_mean, 1 / K))
+                    # loss += -((x.softmax(1) + 1 / K) * x.log_softmax(1)).sum(1).mean()  # Entropy + KL with uniform
+        else:
+            x = net(inputs, adapt=True, feature=False, projection=projection)
+            loss = -((x.softmax(1) + 1 / K) * x.log_softmax(1)).sum(1).mean()
         loss.backward()
         opt.step()
         opt.zero_grad(set_to_none=True)
         if iteration+1 in iterations:
             weights = {'weights': net.state_dict()}
             torch.save(weights, save_iter + 'weights_iter_' + str(iteration+1) +'.pkl')
+    net.eval()
 
 def adapt_batch_affinity(net, niter, inputs, opt, K, iterations, save_iter, force_simmetry=True):
     net.inference = False
