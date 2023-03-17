@@ -14,28 +14,24 @@ def argparser():
     parser.add_argument('--print-freq', type=int, default=10, help='Number of epochs to print progress')
 
     #Model
-    parser.add_argument('--model', type=str, default='resnet50', choices=('resnet50', 'resnet18', 'resnet10t'))
-    parser.add_argument('--layers', type=list, default=[None, None, None, 'mask'], help='name of adapter; mask or maskadapt')
-    parser.add_argument('--timm', action='store_true', help='Using timm models')
-    parser.add_argument('--layer1', default=None)
-    parser.add_argument('--layer2', default=None)
-    parser.add_argument('--layer3', default=None)
-    parser.add_argument('--layer4', default=None)
+    parser.add_argument('--model', type=str, default='resnet50')
     parser.add_argument('--loss', type=int, default=1)
     parser.add_argument('--project-layer1', default=None)
     parser.add_argument('--project-layer2', default=None)
     parser.add_argument('--project-layer3', default=None)
     parser.add_argument('--project-layer4', default=None)
-    parser.add_argument('--extract-layer', type=int, default=1)
+    parser.add_argument('--extract-layer', type=int, default=3)
     parser.add_argument('--projection', action='store_true', help='Using projectors')
+    parser.add_argument('--eval', action='store_true', help='Using Eval at training')
+    parser.add_argument('--load', type=str)
 
     #Dataset
     parser.add_argument('--dataset', type=str, default='cifar10', choices=('cifar10', 'cifar100', 'imagenet'))
     parser.add_argument('--target', type=str, default='cifar10')
-    parser.add_argument('--workers', type=int, default=8, help='Number of workers for dataloader')
+    parser.add_argument('--workers', type=int, default=6, help='Number of workers for dataloader')
 
     #Source training
-    parser.add_argument('--epochs', type=int, default=350, help='Number of base training epochs')
+    parser.add_argument('--epochs', type=int, default=100, help='Number of base training epochs')
     parser.add_argument('--start-epoch', type=int, default=0, help='Manual epoch number for restarts')
     parser.add_argument('--batch-size', type=int, default=128, help='Batch size for base training')
     parser.add_argument('--lr', type=float, default=0.1, help='Learning rate')

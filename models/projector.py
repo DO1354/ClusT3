@@ -13,6 +13,16 @@ def get_part(model,layer):
     return nn.Sequential(*extractor)
 
 
+class ExtractorHead(nn.Module):
+    def __init__(self, ext, head):
+        super(ExtractorHead, self).__init__()
+        self.ext = ext
+        self.head = head
+
+    def forward(self, x):
+        x = self.ext(x)
+        return self.head(x)
+
 class Projector(nn.Module):
     def __init__(self, extractor, channels, size, K=10):
         super(Projector, self).__init__()

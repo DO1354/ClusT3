@@ -6,41 +6,43 @@ import torch.distributed as dist
 import torch.backends.cudnn as cudnn
 
 from utils import create_model, prepare_dataset, utils
+from models import ResNet
 import configuration
 
 best_acc1 = 0
 
 def main(args):
     global best_acc1
-    ngpus_per_node = torch.cuda.device_count()
-    local_rank = int(os.environ.get("SLURM_LOCALID"))
-    rank = int(os.environ.get("SLURM_NODEID")) * ngpus_per_node + local_rank
-    current_device = local_rank
-    torch.cuda.set_device(current_device)
-    if rank == 0:
-        print('From Rank: {}, ==> Initializing Process Group...'.format(rank))
-    dist.init_process_group(backend=args.dist_backend, init_method=args.init_method, world_size=args.world_size, rank=rank)
+    #ngpus_per_node = torch.cuda.device_count()
+    #local_rank = int(os.environ.get("SLURM_LOCALID"))
+    #rank = int(os.environ.get("SLURM_NODEID")) * ngpus_per_node + local_rank
+    #current_device = local_rank
+    #torch.cuda.set_device(current_device)
+    #if rank == 0:
+    #    print('From Rank: {}, ==> Initializing Process Group...'.format(rank))
+    #dist.init_process_group(backend=args.dist_backend, init_method=args.init_method, world_size=args.world_size, rank=rank)
 
-    args.batch_size = int(args.batch_size / ngpus_per_node)
-    args.workers = int((args.workers + ngpus_per_node - 1) / ngpus_per_node)
+    args.batch_size = int(args.batch_size) # / ngpus_per_node)
+    args.workers = int(args.workers) # + ngpus_per_node - 1) / ngpus_per_node)
 
-    if rank == 0:
-        print('From Rank: {}, ==> Making model..'.format(rank))
-    layers = [None, None, None, None]
-    model = create_model.create_model(args.model, args.dataset, layers, args.timm).cuda()
+    #if rank == 0:
+    #    print('From Rank: {}, ==> Making model..'.format(rank))
+    model = ResNet.resnet50(10).cuda()
     criterion = nn.CrossEntropyLoss().cuda()
+    args.corruption = 'original'
+    args.epochs = 350
 
     if args.resume:
-        if os.path.isfile(args.resume):
-            if rank == 0:
-                print("=> loading checkpoint '{}'".format(rank))
+        #if os.path.isfile(args.resume):
+        #    if rank == 0:
+        #        print("=> loading checkpoint '{}'".format(rank))
         checkpoint = torch.load(args.resume)
         args.start_epoch = checkpoint['epoch']
         best_acc1 = checkpoint['best_acc1']
-        if rank == 0:
-            print("=> loaded checkpoint '{}' (epoch {})".format(rank, checkpoint['epoch']))
+        #if rank == 0:
+        #    print("=> loaded checkpoint '{}' (epoch {})".format(rank, checkpoint['epoch']))
 
-    model = torch.nn.parallel.DistributedDataParallel(model, device_ids=[current_device])
+    #model = torch.nn.parallel.DistributedDataParallel(model, device_ids=[current_device])
     optimizer = torch.optim.SGD(model.parameters(), args.lr, momentum=args.momentum, weight_decay=args.weight_decay)
     #optimizer = torch.optim.Adam(model.parameters(), args.lr)
     scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, milestones=(150, 250), gamma=0.1)
@@ -48,36 +50,36 @@ def main(args):
     if args.resume:
         optimizer.load_state_dict(checkpoint['optimizer'])
 
-    if rank == 0:
-        print('From Rank: {}, ==> Preparing data..'.format(rank))
+    #if rank == 0:
+    #    print('From Rank: {}, ==> Preparing data..'.format(rank))
     cudnn.benchmark = True
     teloader, tesampler = prepare_dataset.prepare_test_data(args)
     trloader, trsampler = prepare_dataset.prepare_train_data(args)
-    if rank == 0:
-        print('Test on original data')
+    #if rank == 0:
+    print('Test on original data')
 
-    if rank == 0:
-        print('\t\tTrain Loss \t\t Val Loss \t\t Train Accuracy \t\t Val Acccuracy')
+    #if rank == 0:
+    print('\t\tTrain Loss \t\t Val Loss \t\t Train Accuracy \t\t Val Acccuracy')
 
     for epoch in range(args.start_epoch, args.epochs):
-        trsampler.set_epoch(epoch)
-        tesampler.set_epoch(epoch)
+    #    trsampler.set_epoch(epoch)
+    #    tesampler.set_epoch(epoch)
         acc_train, loss_train = train(model, criterion, optimizer, trloader)
         acc_val, loss_val = validate(model, criterion, teloader)
         scheduler.step()
 
-        if rank == 0:
-            print(('Epoch %d/%d:' % (epoch, args.epochs)).ljust(24) +
+    #    if rank == 0:
+        print(('Epoch %d/%d:' % (epoch, args.epochs)).ljust(24) +
                       '%.2f\t\t%.2f\t\t%.2f\t\t%.2f' % (loss_train, loss_val, acc_train, acc_val))
 
         is_best = acc_val > best_acc1
         best_acc1 = max(acc_val, best_acc1)
 
-        if rank == 0:
-            utils.save_checkpoint({
+        #if rank == 0:
+        utils.save_checkpoint({
                 'epoch': epoch + 1,
                 'arch': args.model,
-                'state_dict': model.module.state_dict(),
+                'state_dict': model.state_dict(),
                 'best_acc1': best_acc1,
                 'optimizer': optimizer.state_dict(),
                 }, is_best, args)

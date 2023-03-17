@@ -2,8 +2,17 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from models.adapters import *
 
+def get_part(model,layer):
+    if layer ==1:
+        extractor = [model.conv1, model.bn1, nn.ReLU(inplace=True), model.layer1]
+    elif layer ==2:
+        extractor = [model.conv1, model.bn1, nn.ReLU(inplace=True), model.layer1, model.layer2]
+    elif layer ==3:
+        extractor = [model.conv1, model.bn1, nn.ReLU(inplace=True), model.layer1, model.layer2, model.layer3]
+    elif layer ==4:
+        extractor = [model.conv1, model.bn1, nn.ReLU(inplace=True), model.layer1, model.layer2, model.layer3, model.layer4]
+    return nn.Sequential(*extractor)
 
 class BasicBlock(nn.Module):
     expansion = 1
@@ -59,7 +68,7 @@ class Bottleneck(nn.Module):
 
 
 class ResNet(nn.Module):
-    def __init__(self, block, num_blocks, num_classes=10, layers=[None,None,None,None], projector=[None, None, None, None]):
+    def __init__(self, block, num_blocks, num_classes=10, K=10, projector=[None, None, None, None]):
         super(ResNet, self).__init__()
         self.in_planes = 64
 
@@ -70,23 +79,14 @@ class ResNet(nn.Module):
         self.layer3 = self._make_layer(block, 256, num_blocks[2], stride=2) #256
         self.layer4 = self._make_layer(block, 512, num_blocks[3], stride=2) #512
         self.fc = nn.Linear(512*block.expansion, num_classes) #512
-        self.layers = layers
-        if layers[0] is not None:
-            self.mask1 = self._get_mask_adapter(layers[0], 256, 32)
-        if layers[1] is not None:
-            self.mask2 = self._get_mask_adapter(layers[1], 512, 16)
-        if layers[2] is not None:
-            self.mask3 = self._get_mask_adapter(layers[2], 1024, 8)
-        if layers[3] is not None:
-            self.mask4 = self._get_mask_adapter(layers[3], 2048, 4)
         if projector[0] is not None:
-            self.projector1 = nn.Linear(256*32*32, num_classes)
+            self.projector1 = nn.Conv2d(256, K, kernel_size=1) #Linear(256*32*32, num_classes)
         if projector[1] is not None:
-            self.projector2 = nn.Linear(512*16*16, num_classes)
+            self.projector2 = nn.Conv2d(512, K, kernel_size=1) #Linear(512*16*16, num_classes)
         if projector[2] is not None:
-            self.projector3 = nn.Linear(1024*8*8, num_classes)
+            self.projector3 = nn.Conv2d(1024, K, kernel_size=1) #Linear(1024*8*8, num_classes)
         if projector[3] is not None:
-            self.projector4 = nn.Linear(2048*4*4, num_classes)
+            self.projector4 = nn.Conv2d(2048, K, kernel_size=1) #Linear(2048*4*4, num_classes)
 
     def _make_layer(self, block, planes, num_blocks, stride):
         strides = [stride] + [1]*(num_blocks-1)
@@ -96,51 +96,28 @@ class ResNet(nn.Module):
             self.in_planes = planes * block.expansion
         return nn.Sequential(*layers)
 
-    def _get_mask_adapter(self, name, channels, resolution):
-        if name == 'mask':
-            adapter = MaskAttention(channels, resolution)
-        elif name == 'maskadapt':
-            adapter = MaskAdapter(channels, resolution)
-        elif name == 'alladapt':
-            adapter = AllAdapter(channels, resolution)
-        elif name == 'conv':
-            adapter = ConvAdapter(channels)
-        elif name == 'cycle':
-            adapter = CycleCL(channels)
-        elif name == 'flow':
-            adapter = FlowAdapter(channels, resolution, C=1)
-        return adapter
-
-    def forward(self, x, adapt=False, feature=False, projection=False):
+    def forward(self, x, feature=False, projection=False):
         out_proj = [None, None, None, None]
         out = F.relu(self.bn1(self.conv1(x)))
         out = self.layer1(out)
-        if hasattr(self, 'mask1') and adapt:
-            out = self.mask1(out, inference=True if self.inference else False)
-        if hasattr(self, 'projector1'):
-            z1 = out.view(out.size(0), -1)
-            z1 = self.projector1(z1)
+        if hasattr(self, 'projector1') and projection:
+            z1 = self.projector1(out)
+            z1 = z1.view(z1.size(1), -1)
             out_proj[0] = z1
         out = self.layer2(out)
-        if hasattr(self, 'mask2') and adapt:
-            out = self.mask2(out, inference=True if self.inference else False)
-        if hasattr(self, 'projector2'):
-            z2 = out.view(out.size(0), -1)
-            z2 = self.projector2(z2)
+        if hasattr(self, 'projector2') and projection:
+            z2 = self.projector2(out)
+            z2 = z2.view(z2.size(1), -1)
             out_proj[1] = z2
         out = self.layer3(out)
-        if hasattr(self, 'mask3') and adapt:
-            out = self.mask3(out, inference=True if self.inference else False)
-        if hasattr(self, 'projector3'):
-            z3 = out.view(out.size(0), -1)
-            z3 = self.projector3(z3)
+        if hasattr(self, 'projector3') and projection:
+            z3 = self.projector3(out)
+            z3 = z3.view(z3.size(1), -1)
             out_proj[2] = z3
         out = self.layer4(out)
-        if hasattr(self, 'mask4') and adapt:
-            out = self.mask4(out, inference=True if self.inference else False)
-        if hasattr(self, 'projector4'):
-            z4 = out.view(out.size(0), -1)
-            z4 = self.projector4(z4)
+        if hasattr(self, 'projector4') and projection:
+            z4 = self.projector4(out)
+            z4 = z4.view(z4.size(1), -1)
             out_proj[3] = z4
         out = F.avg_pool2d(out, 4)
         out = out.view(out.size(0), -1)
@@ -157,6 +134,6 @@ class ResNet(nn.Module):
             else:
                 return out
 
-def resnet50(num_classes = 10, layers = [None, None, None, None], projector = [None, None, None, None],  **kwargs):
-    model = ResNet(Bottleneck, [3, 4, 6, 3], num_classes=num_classes, layers=layers, projector=projector, **kwargs)
+def resnet50(num_classes = 10, projector = [None, None, None, None], K=10,  **kwargs):
+    model = ResNet(Bottleneck, [3, 4, 6, 3], num_classes=num_classes, K=K, projector=projector, **kwargs)
     return model

@@ -2,8 +2,17 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from models.adapters import *
 
+def get_part(model,layer):
+    if layer ==1:
+        extractor = [model.conv1, model.bn1, nn.ReLU(inplace=True), model.layer1]
+    elif layer ==2:
+        extractor = [model.conv1, model.bn1, nn.ReLU(inplace=True), model.layer1, model.layer2]
+    elif layer ==3:
+        extractor = [model.conv1, model.bn1, nn.ReLU(inplace=True), model.layer1, model.layer2, model.layer3]
+    elif layer ==4:
+        extractor = [model.conv1, model.bn1, nn.ReLU(inplace=True), model.layer1, model.layer2, model.layer3, model.layer4]
+    return nn.Sequential(*extractor)
 
 class BasicBlock(nn.Module):
     expansion = 1
@@ -59,7 +68,7 @@ class Bottleneck(nn.Module):
 
 
 class ResNet(nn.Module):
-    def __init__(self, block, num_blocks, num_classes=10, layers=[None,None,None,'mask']):
+    def __init__(self, block, num_blocks, num_classes=10):
         super(ResNet, self).__init__()
         self.in_planes = 64
 
@@ -70,7 +79,6 @@ class ResNet(nn.Module):
         self.layer3 = self._make_layer(block, 256, num_blocks[2], stride=2) #256
         self.layer4 = self._make_layer(block, 512, num_blocks[3], stride=2) #512
         self.fc = nn.Linear(512*block.expansion, num_classes) #512
-        self.layers = layers
 
     def _make_layer(self, block, planes, num_blocks, stride):
         strides = [stride] + [1]*(num_blocks-1)
@@ -80,13 +88,6 @@ class ResNet(nn.Module):
             self.in_planes = planes * block.expansion
         return nn.Sequential(*layers)
 
-    def _get_mask_adapter(self, name, size):
-        if name == 'mask':
-            adapter = MaskAttention(size)
-        else:
-            adapter = MaskAdapter(size)
-        return adapter
-
     def forward(self, x, feature=False):
         out = F.relu(self.bn1(self.conv1(x)))
         out = self.layer1(out)
@@ -94,16 +95,14 @@ class ResNet(nn.Module):
         out = self.layer3(out)
         out = self.layer4(out)
         out = F.avg_pool2d(out, 4)
-        cube = out
         out = out.view(out.size(0), -1)
         features = out
         out = self.fc(out)
         if feature:
-            return out, features, cube
+            return out, features
         else:
             return out
 
-
-def resnet50(num_classes = 10, **kwargs):
+def resnet50(num_classes = 10,  **kwargs):
     model = ResNet(Bottleneck, [3, 4, 6, 3], num_classes=num_classes, **kwargs)
     return model
